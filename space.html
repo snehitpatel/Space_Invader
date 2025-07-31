@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Invader Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        h1 {
+            margin: 10px 0;
+        }
+        canvas {
+            border: 1px solid white;
+        }
+        .notification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: rgba(182, 28, 14, 0.87);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>&#x1F680; Space Invader &#x1F680;</h1>
+    <div class="notification" id="bossNotification">Boss Level</div>
+    <script>
+        // Canvas setup
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 500;
+        canvas.height = 500;
+        document.body.appendChild(canvas);
+
+        // Player variables
+        let playerX = 250; // Initial X position of the player's plane
+        const playerWidth = 50;
+        const playerHeight = 50;
+        const playerSpeed = 10;
+
+        // Obstacle variables
+        let obstacles = [];
+        let destroyedCount = 0;
+        let obstacleSpeed = 2;
+        const obstacleWidth = 30;
+        const obstacleHeight = 30;
+
+        // Bullet variables
+        let bullets = [];
+        const bulletWidth = 5;
+        const bulletHeight = 15;
+        const bulletSpeed = 5;
+        let bulletInterval = 300; // Initial bullet spawn interval
+        let doubleBullets = false; // Flag for double bullets
+
+        // Boss variables
+        let bossHealth = 10;
+        let bossX = 200;
+        let bossY = 50;
+        const bossWidth = 100;
+        const bossHeight = 50;
+        let bossDirection = 1; // 1 for right, -1 for left
+        let bossBullets = []; // Boss's bullets
+        const bossBulletSpeed = 3; // Speed of boss's bullets
+
+        // Game state
+        let level = 1;
+        let gameActive = true;
+
+        // Notification element
+        const bossNotification = document.getElementById('bossNotification');
+
+        // Draw player's plane
+        function drawPlayer() {
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(playerX, canvas.height - playerHeight, playerWidth, playerHeight);
+        }
+
+        // Draw obstacles
+        function drawObstacles() {
+            for (let obstacle of obstacles) {
+                ctx.fillStyle = obstacle.special ? 'green' : 'red'; // Special obstacle is green
+                ctx.fillRect(obstacle.x, obstacle.y, obstacleWidth, obstacleHeight);
+            }
+        }
+
+        // Draw bullets
+        function drawBullets() {
+            ctx.fillStyle = 'yellow';
+            for (let bullet of bullets) {
+                ctx.fillRect(bullet.x, bullet.y, bulletWidth, bulletHeight);
+            }
+        }
+
+        // Draw boss
+        function drawBoss() {
+            ctx.fillStyle = 'purple';
+            ctx.fillRect(bossX, bossY, bossWidth, bossHeight);
+            // Draw boss health bar
+            ctx.fillStyle = 'green';
+            ctx.fillRect(bossX, bossY - 10, bossWidth * (bossHealth / 10), 5);
+        }
+
+        // Draw boss bullets
+        function drawBossBullets() {
+            ctx.fillStyle = 'orange';
+            for (let bullet of bossBullets) {
+                ctx.fillRect(bullet.x, bullet.y, bulletWidth, bulletHeight);
+            }
+        }
+
+        // Draw level text
+        function drawLevel() {
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Level: ${level}`, 10, 30, );
+        }
+
+        // Draw live score
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${destroyedCount}`, canvas.width - 120, 30);
+        }
+
+        // Spawn obstacles
+        function spawnObstacle() {
+            if ((level === 1 && destroyedCount < 10) || (level === 2 && destroyedCount < 30)) {
+                let obstacle = {
+                    x: Math.random() * (canvas.width - obstacleWidth), // Random X position
+                    y: 0, // Start at the top
+                    special: Math.random() < 0.1, // 10% chance to be a special obstacle
+                };
+                obstacles.push(obstacle);
+            }
+        }
+
+        // Spawn bullets
+        function spawnBullet() {
+            if (doubleBullets) {
+                // Spawn two bullets side by side
+                bullets.push({
+                    x: playerX + playerWidth / 2 - bulletWidth - 2, // Left bullet
+                    y: canvas.height - playerHeight - bulletHeight,
+                });
+                bullets.push({
+                    x: playerX + playerWidth / 2 + 2, // Right bullet
+                    y: canvas.height - playerHeight - bulletHeight,
+                });
+            } else {
+                // Spawn a single bullet
+                bullets.push({
+                    x: playerX + playerWidth / 2 - bulletWidth / 2, // Center of the player's plane
+                    y: canvas.height - playerHeight - bulletHeight, // Just above the player's plane
+                });
+            }
+        }
+
+        // Spawn boss bullets
+        function spawnBossBullet() {
+            if (level === 3) {
+                bossBullets.push({
+                    x: bossX + bossWidth / 2 - bulletWidth / 2, // Center of the boss
+                    y: bossY + bossHeight, // Just below the boss
+                });
+            }
+        }
+
+        // Update obstacles' positions
+        function updateObstacles() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].y += obstacleSpeed; // Move obstacle downward
+                if (obstacles[i].y > canvas.height) { // If obstacle goes off-screen
+                    obstacles.splice(i, 1); // Remove obstacle
+                }
+            }
+        }
+
+        // Update bullets' positions
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= bulletSpeed; // Move bullet upward
+                if (bullets[i].y + bulletHeight < 0) { // If bullet goes off-screen
+                    bullets.splice(i, 1); // Remove bullet
+                }
+            }
+        }
+
+        // Update boss bullets' positions
+        function updateBossBullets() {
+            for (let i = bossBullets.length - 1; i >= 0; i--) {
+                bossBullets[i].y += bossBulletSpeed; // Move boss bullet downward
+                if (bossBullets[i].y > canvas.height) { // If boss bullet goes off-screen
+                    bossBullets.splice(i, 1); // Remove boss bullet
+                }
+            }
+        }
+
+        // Check for collisions (bullets hitting obstacles)
+        function checkBulletCollision() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    if (
+                        bullets[j].x < obstacles[i].x + obstacleWidth &&
+                        bullets[j].x + bulletWidth > obstacles[i].x &&
+                        bullets[j].y < obstacles[i].y + obstacleHeight &&
+                        bullets[j].y + bulletHeight > obstacles[i].y
+                    ) {
+                        // Collision detected
+                        destroyedCount++;
+                        if (obstacles[i].special) {
+                            // Apply power-up
+                            bulletInterval *= 0.7; // Increase firing rate by 30%
+                            doubleBullets = true; // Enable double bullets
+                            setTimeout(() => {
+                                doubleBullets = false; // Disable double bullets after 5 seconds
+                            }, 5000);
+                        }
+                        obstacles.splice(i, 1); // Remove obstacle
+                        bullets.splice(j, 1); // Remove bullet
+                        break; // Exit inner loop
+                    }
+                }
+            }
+
+            // Level 1 complete condition
+            if (level === 1 && destroyedCount >= 10) {
+                alert(`Level 1 Complete! Score: ${destroyedCount}`);
+                level = 2;
+                startLevel2();
+            }
+
+            // Level 2 complete condition
+            if (level === 2 && destroyedCount >= 30) {
+                showBossNotification();
+                setTimeout(() => {
+                    level = 3;
+                    startBossLevel();
+                }, 2000); // Wait 2 seconds before starting Boss Level
+            }
+        }
+
+        // Check for collisions (bullets hitting boss)
+        function checkBossCollision() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                if (
+                    bullets[i].x < bossX + bossWidth &&
+                    bullets[i].x + bulletWidth > bossX &&
+                    bullets[i].y < bossY + bossHeight &&
+                    bullets[i].y + bulletHeight > bossY
+                ) {
+                    // Collision detected
+                    bossHealth--;
+                    bullets.splice(i, 1); // Remove bullet
+                    if (bossHealth <= 0) {
+                        gameActive = false;
+                        alert('You Win!');
+                    }
+                }
+            }
+        }
+
+        
+
+        // Check for collisions (boss bullets hitting player)
+        function checkBossBulletCollision() {
+            for (let i = bossBullets.length - 1; i >= 0; i--) {
+                if (
+                    bossBullets[i].x < playerX + playerWidth &&
+                    bossBullets[i].x + bulletWidth > playerX &&
+                    bossBullets[i].y + bulletHeight > canvas.height - playerHeight
+                ) {
+                    // Collision detected
+                    gameActive = false;
+                    alert('You Failed!');
+                    break;
+                }
+            }
+        }
+
+        // Check for collisions (obstacles hitting player)
+        function checkPlayerCollision() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                if (
+                    obstacles[i].x < playerX + playerWidth &&
+                    obstacles[i].x + obstacleWidth > playerX &&
+                    obstacles[i].y + obstacleHeight > canvas.height - playerHeight
+                ) {
+                    // Collision detected
+                    gameActive = false;
+                    alert('You Failed!');
+                    break;
+                }
+            }
+        }
+
+        // Start Level 2
+        function startLevel2() {
+            obstacleSpeed = 4; // Increase obstacle speed
+            setInterval(spawnObstacle, 500); // Spawn obstacles more frequently
+        }
+
+        // Start Boss Level
+        function startBossLevel() {
+            obstacles = []; // Clear any remaining obstacles
+            bullets = []; // Clear any remaining bullets
+            setInterval(moveBoss, 50); // Move boss every 50ms
+            setInterval(spawnBossBullet, 0.5); // Boss attacks every 1 second
+        }
+
+        // Move boss (slowed down)
+        function moveBoss() {
+            bossX += 0.05 * bossDirection; // Reduced speed from 2 to 1
+            if (bossX + bossWidth > canvas.width || bossX < 0) {
+                bossDirection *= -1; // Reverse direction
+            }
+        }
+
+        // Show Boss Level notification
+        function showBossNotification() {
+            bossNotification.style.display = 'block';
+            setTimeout(() => {
+                bossNotification.style.display = 'none';
+            }, 2000); // Hide notification after 2 seconds
+        }
+
+        // Handle player movement
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowLeft' && playerX > 0) {
+                playerX -= playerSpeed; // Move left
+            } else if (event.key === 'ArrowRight' && playerX < canvas.width - playerWidth) {
+                playerX += playerSpeed; // Move right
+            }
+        });
+
+        // Game loop
+        function gameLoop() {
+            if (!gameActive) return;
+
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update game state
+            updateObstacles();
+            updateBullets();
+            updateBossBullets();
+            checkBulletCollision();
+            checkPlayerCollision();
+            checkBossBulletCollision();
+            if (level === 3) {
+                checkBossCollision();
+            }
+
+            // Draw game objects
+            drawPlayer();
+            drawObstacles();
+            drawBullets();
+            drawBossBullets();
+            drawLevel();
+            drawScore();
+            if (level === 3) {
+                drawBoss();
+            }
+
+            // Continue the game loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        setInterval(spawnObstacle, 1000); // Spawn obstacles every 1 second
+        setInterval(spawnBullet,bulletInterval); // Spawn bullets based on the current interval
+        gameLoop();
+    </script>
+</body>
+</html>
+
